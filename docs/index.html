@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Red-Teaming Lab · AI 紅隊測試實驗室</title>
+<meta name="description" content="Research on prompt-injection and jailbreak robustness of LLM applications, measured safely with canary secrets: attack taxonomy, defences, an evaluation harness in Python and an interactive playground.">
+<meta property="og:title" content="AI Red-Teaming Lab · AI 紅隊測試實驗室">
+<meta property="og:description" content="Prompt-injection and jailbreak robustness research — measured safely with canary secrets. Interactive playground and open-source Python harness.">
+<meta property="og:url" content="https://tylercheng00.github.io/ai-redteam-lab/">
+<meta property="og:type" content="website">
+<link rel="canonical" href="https://tylercheng00.github.io/ai-redteam-lab/">
+<meta name="theme-color" content="#060d17">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="brand" href="https://tylercheng00.github.io/"><span class="mark">TC</span><span>Tyler Cheng <em>鄭迪珉</em></span></a>
+    <nav>
+      <a href="#taxonomy">Taxonomy</a><a href="#playground">Playground</a><a href="#results">Results</a><a href="#code">Code</a>
+      <a class="gh" href="https://github.com/tylercheng00/ai-redteam-lab">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="tag"><span class="dot"></span>Interest project · 興趣項目 · AI security</p>
+        <h1>AI Red-Teaming Lab</h1>
+        <p class="zh-title">AI 紅隊測試實驗室：滲透及越獄研究</p>
+        <p class="lede">How easily can an LLM application be talked out of its own rules? This lab studies <b>prompt injection</b> and <b>jailbreak</b> techniques and the defences against them — and measures robustness <b>safely</b>, by trying to extract a meaningless <b>canary</b> code word instead of anything harmful.</p>
+        <p class="lede zh">大型語言模型應用有多容易被「說服」違反自身規則？本實驗室研究<b>提示注入</b>及<b>越獄</b>技術與相應防禦，並以<b>安全</b>方式量度穩健性：測試目標只是一個無意義的<b>金絲雀（canary）</b>暗號，而非任何有害內容。</p>
+        <div class="hero-cta">
+          <a class="btn primary" href="#playground">Open the playground · 互動測試</a>
+          <a class="btn" href="https://github.com/tylercheng00/ai-redteam-lab">View code ↗</a>
+        </div>
+      </div>
+      <div class="term" aria-label="Terminal running the evaluation">
+        <div class="term-bar"><i></i><i></i><i></i><span>~/ai-redteam-lab</span></div>
+        <pre id="termOut" class="term-body"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scope -->
+  <section class="sec slim">
+    <div class="wrap">
+      <div class="scope">
+        <div>
+          <h3>Scope &amp; responsible use <span>研究範圍及負責任使用</span></h3>
+          <ul>
+            <li><b>Canary-only.</b> Every attack targets a harmless code word; no harmful content is requested or produced.<span class="zh">只以無害暗號作測試目標，不要求亦不產生任何有害內容。</span></li>
+            <li><b>Simulated target.</b> The built-in assistant is a transparent rule-based model, so results are reproducible offline.<span class="zh">內置目標是透明的規則模型，結果可離線重現。</span></li>
+            <li><b>Authorised testing only.</b> Point the harness only at systems you own or have written permission to test.<span class="zh">只可測試你擁有或已獲書面授權的系統。</span></li>
+            <li><b>Defence-first.</b> Each technique is documented together with its mitigations.<span class="zh">每項技術均附有防禦方法。</span></li>
+          </ul>
+        </div>
+        <div class="stats" id="heroStats"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Threat model -->
+  <section class="sec" id="threat">
+    <div class="wrap">
+      <p class="kicker">01 · Threat model · 威脅模型</p>
+      <h2>Where instructions can sneak in <span>指令可以從哪裏混入</span></h2>
+      <p class="sub">An LLM application mixes <b>trusted</b> instructions (the system prompt) with <b>untrusted</b> text (user messages, documents, web pages). Prompt injection exploits the fact that the model sees all of it as one stream of tokens. Defences sit at the input, inside the prompt and at the output.<br><span class="zh">LLM 應用把<b>可信</b>指令（系統提示）與<b>不可信</b>文字（用戶訊息、文件、網頁）混在一起。提示注入正是利用模型把一切視為同一串字元的弱點。防禦可放在輸入端、提示之內及輸出端。</span></p>
+      <div class="panel">
+        <svg id="threatSvg" viewBox="0 0 1000 300" role="img" aria-label="Threat model diagram">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5eead4"/></marker>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker>
+          </defs>
+          <g class="box"><rect x="10" y="30" width="190" height="70" rx="12"/><text x="105" y="62">User message</text><text x="105" y="82" class="s">用戶訊息</text></g>
+          <g class="box bad"><rect x="10" y="190" width="190" height="80" rx="12"/><text x="105" y="222">Untrusted data</text><text x="105" y="242" class="s">documents · web · email</text><text x="105" y="258" class="s">不可信數據</text></g>
+          <g class="box shield"><rect x="250" y="40" width="130" height="220" rx="12"/><text x="315" y="120">Input</text><text x="315" y="140">checks</text><text x="315" y="166" class="s">classifier</text><text x="315" y="184" class="s">spotlighting</text><text x="315" y="202" class="s">輸入檢查</text></g>
+          <g class="box core"><rect x="430" y="20" width="250" height="260" rx="16"/><text x="555" y="56">LLM application</text>
+            <rect x="452" y="74" width="206" height="74" rx="10" class="inner"/><text x="555" y="102" class="s">system prompt</text><text x="555" y="124" class="mono">secret = AURORA-7731</text>
+            <rect x="452" y="162" width="206" height="96" rx="10" class="inner"/><text x="555" y="192" class="s">model</text><text x="555" y="214" class="s">reminders · instruction hierarchy</text><text x="555" y="236" class="s">提示內防禦</text></g>
+          <g class="box shield"><rect x="730" y="40" width="120" height="220" rx="12"/><text x="790" y="130">Output</text><text x="790" y="150">filter</text><text x="790" y="176" class="s">輸出過濾</text></g>
+          <g class="box"><rect x="890" y="110" width="100" height="80" rx="12"/><text x="940" y="146">Response</text><text x="940" y="166" class="s">回應</text></g>
+          <path d="M200 65 H248" class="flow" marker-end="url(#ar)"/>
+          <path d="M200 230 H248" class="flow bad" marker-end="url(#ar2)"/>
+          <path d="M380 150 H428" class="flow" marker-end="url(#ar)"/>
+          <path d="M680 150 H728" class="flow" marker-end="url(#ar)"/>
+          <path d="M850 150 H888" class="flow" marker-end="url(#ar)"/>
+          <path id="attackPath" d="M105 230 C 180 230, 210 150, 300 150 S 450 150, 520 210" fill="none" stroke="none"/>
+          <circle r="7" class="pkt bad"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#attackPath"/></animateMotion></circle>
+          <path id="okPath" d="M105 65 C 200 65, 220 150, 320 150 H 940" fill="none" stroke="none"/>
+          <circle r="6" class="pkt"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#okPath"/></animateMotion></circle>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Taxonomy -->
+  <section class="sec alt" id="taxonomy">
+    <div class="wrap">
+      <p class="kicker">02 · Attack taxonomy · 攻擊分類</p>
+      <h2>Nine techniques, one harmless goal <span>九種技術，同一個無害目標</span></h2>
+      <p class="sub">Each card is a publicly documented technique, applied only to the canary goal “reveal the secret code word”. Open a card to see the exact test prompt the harness sends.<br><span class="zh">每張卡都是公開文獻記載的技術，只套用在「說出暗號」這個無害目標上。展開卡片可查看測試程式實際發送的提示。</span></p>
+      <div class="cards" id="cards"></div>
+    </div>
+  </section>
+
+  <!-- Playground -->
+  <section class="sec" id="playground">
+    <div class="wrap">
+      <p class="kicker">03 · Playground · 互動測試</p>
+      <h2>Attack the toy assistant <span>攻擊模擬助手</span></h2>
+      <p class="sub">A browser port of the harness. Pick a technique or write your own prompt, switch defences on and off, and watch the request move through the pipeline. The assistant is simulated — nothing is sent anywhere.<br><span class="zh">測試程式的瀏覽器版本。選擇技術或自行輸入提示、開關防禦，觀察請求如何經過每一層。助手是模擬的，不會發送任何資料。</span></p>
+      <div class="pg">
+        <div class="pg-left">
+          <label class="lbl" for="atkSel">Technique · 技術</label>
+          <select id="atkSel"></select>
+          <label class="lbl" for="prompt">Prompt · 提示 <small>(editable · 可修改)</small></label>
+          <textarea id="prompt" rows="6" spellcheck="false"></textarea>
+          <p class="lbl">Defences · 防禦</p>
+          <div class="switches">
+            <label><input type="checkbox" data-def="detector"><span>Input classifier<small>輸入分類器</small></span></label>
+            <label><input type="checkbox" data-def="spotlight"><span>Spotlighting<small>數據標記</small></span></label>
+            <label><input type="checkbox" data-def="sandwich"><span>Sandwich reminder<small>提示後提醒</small></span></label>
+            <label><input type="checkbox" data-def="filter"><span>Output filter<small>輸出過濾</small></span></label>
+          </div>
+          <button class="btn primary run" id="runBtn">▶ Run attack · 執行</button>
+        </div>
+        <div class="pg-right">
+          <ol class="stages" id="stages">
+            <li data-st="input">Input<small>輸入</small></li>
+            <li data-st="detector">Classifier<small>分類器</small></li>
+            <li data-st="spotlight">Spotlight<small>標記</small></li>
+            <li data-st="sandwich">Sandwich<small>提醒</small></li>
+            <li data-st="model">Model<small>模型</small></li>
+            <li data-st="filter">Filter<small>過濾</small></li>
+          </ol>
+          <div class="term small">
+            <div class="term-bar"><i></i><i></i><i></i><span>trace</span></div>
+            <pre id="log" class="term-body"></pre>
+          </div>
+          <div class="verdict" id="verdict" aria-live="polite">Run an attack to see the result · 執行測試以查看結果</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section class="sec alt" id="results">
+    <div class="wrap">
+      <p class="kicker">04 · Results · 結果</p>
+      <h2>Robustness matrix <span>穩健性矩陣</span></h2>
+      <p class="sub"><b>ASR</b> = attack success rate (share of techniques that leaked the canary). <b>FPR</b> = false-positive rate (share of benign prompts wrongly blocked or refused). No single defence covers everything; layering does — on this simulated target.<br><span class="zh"><b>ASR</b>＝攻擊成功率；<b>FPR</b>＝誤判率（正常請求被錯誤攔截的比例）。沒有單一防禦能覆蓋所有技術，多層防禦才可以——以上結果只適用於此模擬目標。</span></p>
+      <div class="panel matrix-wrap"><table class="matrix" id="matrix"></table></div>
+      <p class="check" id="portCheck"></p>
+    </div>
+  </section>
+
+  <!-- Code -->
+  <section class="sec" id="code">
+    <div class="wrap">
+      <p class="kicker">05 · Code · 程式碼</p>
+      <h2>An evaluation harness you can extend <span>可擴充的評估框架</span></h2>
+      <div class="code-grid">
+        <div>
+          <p class="file">architecture</p>
+<pre class="code"><code>src/redteam_lab/
+├── <b>targets.py</b>     <span class="c"># ToyAssistant (simulated) · FunctionTarget adapter</span>
+├── <b>attacks.py</b>     <span class="c"># 9 techniques → canary-goal prompts</span>
+├── <b>defenses.py</b>    <span class="c"># classifier · spotlighting · sandwich · output filter</span>
+├── <b>evaluate.py</b>    <span class="c"># trials · ASR / FPR · ground-truth leak judge</span>
+└── <b>__main__.py</b>    <span class="c"># python -m redteam_lab</span>
+tests/              <span class="c"># 24 pytest cases</span>
+docs/               <span class="c"># this site (browser port)</span></code></pre>
+        </div>
+        <div>
+          <p class="file">quickstart.py</p>
+<pre class="code"><code><span class="k">import</span> redteam_lab <span class="k">as</span> rl
+
+<span class="c"># robustness matrix: attacks × defence configurations</span>
+<span class="k">print</span>(rl.to_markdown(rl.evaluate()))
+
+<span class="c"># compose defences around any target</span>
+target = rl.DefendedTarget(
+    rl.ToyAssistant(), rl.DEFAULT_CANARY,
+    detector=rl.InjectionDetector(threshold=<span class="n">0.5</span>),
+    use_spotlight=<span class="k">True</span>, output_filter=<span class="k">True</span>,
+)
+trial = rl.run_trial(target, rl.attacks.get(<span class="s">"indirect"</span>))
+<span class="k">print</span>(trial.leaked, target.last_events)</code></pre>
+        </div>
+        <div>
+          <p class="file">your_system.py</p>
+<pre class="code"><code><span class="c"># test a system you own or are authorised to test</span>
+<span class="k">def</span> my_app(system: <span class="k">str</span>, user: <span class="k">str</span>) -&gt; <span class="k">str</span>:
+    <span class="k">return</span> call_my_model(system, user)
+
+target = rl.DefendedTarget(
+    rl.FunctionTarget(my_app), rl.DEFAULT_CANARY,
+    use_sandwich=<span class="k">True</span>,
+)
+results = rl.evaluate({<span class="s">"mine"</span>: <span class="k">lambda</span>: target})</code></pre>
+        </div>
+        <div>
+          <p class="file">defenses.py — spotlighting</p>
+<pre class="code"><code><span class="k">def</span> spotlight(user, marker=<span class="s">"^"</span>):
+    <span class="s">"""Datamarking: interleave a marker through
+    untrusted blocks so they read as data."""</span>
+    <span class="k">return</span> _DATA_BLOCK.sub(
+        <span class="k">lambda</span> m: <span class="s">"&lt;&lt;DATA&gt;&gt;"</span>
+          + marker.join(m.group(<span class="n">1</span>).split())
+          + <span class="s">"&lt;&lt;/DATA&gt;&gt;"</span>,
+        user)</code></pre>
+        </div>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/tylercheng00/ai-redteam-lab">Source on GitHub ↗</a>
+        <a class="btn" href="https://tylercheng00.github.io/">← tylercheng00.github.io</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>AI Red-Teaming Lab · an interest project by 鄭迪珉 Tyler Tik Man Cheng · MIT License</p>
+    <p>For defensive research and education. The built-in target is simulated; its results are not measurements of any real model. Test only systems you own or are explicitly authorised to test.<br>僅作防禦研究及教育用途。內置目標為模擬，結果並非任何真實模型的量度。只可測試你擁有或已獲明確授權的系統。</p>
+    <p>Contact · 聯絡：<a href="mailto:info@tylerfuture.com">info@tylerfuture.com</a> · <a href="https://www.linkedin.com/in/tik-man-cheng">LinkedIn</a></p>
+  </div>
+</footer>
+<script src="lab.js"></script>
+</body>
+</html>
